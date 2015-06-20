@@ -23,7 +23,7 @@ def charges(request):
         data['charges'] = p.charges()
 
     else:
-        data['authorize_url'] = p.get_auth_url()
+        data['authorize_url'] = p.get_auth_url(request.build_absolute_uri())
 
         request.session[SESSION_ACCESS_TOKEN] = p.access_token
         request.session[SESSION_ACCESS_SECRET] = p.access_secret

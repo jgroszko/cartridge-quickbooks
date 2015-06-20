@@ -40,9 +40,9 @@ class Payments:
             self.session = self.service.get_session((session_info.access_key,
                                                      session_info.access_secret))
 
-    def get_auth_url(self):
+    def get_auth_url(self, callback_url):
         params = {
-            'oauth_callback': "http://localhost:8000/admin/quickbooks/charges/"
+            'oauth_callback': callback_url
         }
 
         self.access_token, self.access_secret = self.service.get_request_token(params=params)
