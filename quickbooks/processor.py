@@ -41,4 +41,6 @@ def quickbooks_payment_handler(request, order_form, order):
         return charge['id']
 
     except:
+        logger.warning("There was a problem with payment for order %s" % order,
+                       exc_info=True)
         raise CheckoutError("There was a problem with payment")

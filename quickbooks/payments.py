@@ -92,6 +92,6 @@ class Payments:
                                         data=json.dumps(charge_data))
 
         if(not response.ok):
-            raise Exception(response.reason)
+            raise Exception(response.content)
 
         return response.json()
