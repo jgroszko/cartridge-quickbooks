@@ -1,4 +1,4 @@
-import json, uuid
+import json, uuid, logging
 
 from quickbooks.models import OAuth_Session
 from mezzanine.conf import settings
@@ -10,6 +10,7 @@ SERVICE_NAME = "QuickBooks Payments API"
 REQUEST_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_request_token"
 ACCESS_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_access_token"
 AUTHORIZE_URL = "https://appcenter.intuit.com/connect/begin"
+RECONNECT_URL = "https://appcenter.intuit.com/api/v1/connection/reconnect"
 
 if settings.DEBUG:
     BASE_URL = "https://sandbox.api.intuit.com/quickbooks/v4/payments"
@@ -17,6 +18,8 @@ else:
     BASE_URL = "https://api.intuit.com/quickbooks/v4/payments"
 
 CHARGES_URL = BASE_URL + "/charges/"
+
+logger = logging.getLogger(__name__)
 
 class Payments:
     def __init__(self, access_token=None, access_secret=None):
@@ -95,3 +98,32 @@ class Payments:
             raise Exception(response.content)
 
         return response.json()
+
+    def reconnect(self):
+        response = self.session.request("GET",
+                                        RECONNECT_URL,
+                                        header_auth=True,
+                                        headers={
+                                            'Content-Type': 'application/json',
+                                            'Request-Id': str(uuid.uuid1()),
+                                            'Company-Id': self.company_id
+                                        },
+                                        data=None)
+
+        if(not response.ok):
+            raise Exception(response.content)
+
+        response_data = response.json()
+
+        if('ErrorCode' in response_data):
+            if(response_data['ErrorCode'] == 212):
+                logger.info("Attempted to renew API token outside of window\n%s" % response.content)
+            else:
+                raise Exception(response.content)
+        else:
+            oas = OAuth_Session.objects.get()
+            oas.access_key = response_data['OAuthToken']
+            oas.access_secret = response_data['OAuthTokenSecret']
+            oas.save()
+
+            logger.info("Successfully reconnect API token" % response.content)
