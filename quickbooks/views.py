@@ -1,5 +1,6 @@
 from django.shortcuts import render_to_response
 from django.template import RequestContext
+from django.contrib.admin.views.decorators import staff_member_required
 
 from mezzanine.conf import settings
 
@@ -9,6 +10,7 @@ from quickbooks.payments import Payments
 SESSION_ACCESS_TOKEN = 'qb_oauth_access_token'
 SESSION_ACCESS_SECRET = 'qb_oauth_access_secret'
 
+@staff_member_required
 def charges(request):
     data = {}
     p = Payments(
