@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from cartridge.shop.checkout import CheckoutError
-from payments import Payments
+from quickbooks.payments import Payments
 
 logger = logging.getLogger(__name__)
 
