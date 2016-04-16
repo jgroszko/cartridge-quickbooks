@@ -15,7 +15,7 @@ def quickbooks_payment_handler(request, order_form, order):
     data = order_form.cleaned_data
 
     try:
-        charge = p.charge({
+        charge = p.charge_create({
             "amount": str(order.total),
             "currency": "USD",
             "card": {

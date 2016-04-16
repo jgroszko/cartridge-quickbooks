@@ -18,6 +18,7 @@ else:
     BASE_URL = "https://api.intuit.com/quickbooks/v4/payments"
 
 CHARGES_URL = BASE_URL + "/charges/"
+CHARGES_REFUND_URL_FORMAT = BASE_URL + "/charges/%s/refunds"
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,38 @@ class Payments:
 
         return response.json()
 
-    def charge(self, charge_data):
+    def charge(self, charge_id):
+        response = self.session.request("GET",
+                                        CHARGES_URL + charge_id)
+
+        if(not response.ok):
+            raise Exception(response.reason)
+
+        return response.json()
+
+    def charge_refund(self, charge_id):
+        charge = self.charge(charge_id)
+
+        refund_data = {
+            "amount": charge['amount']
+        }
+
+        response = self.session.request("POST",
+                                        CHARGES_REFUND_URL_FORMAT % charge_id,
+                                        header_auth=True,
+                                        headers = {
+                                            'Content-Type': 'application/json',
+                                            'Request-Id': str(uuid.uuid1()),
+                                            'Company-Id': self.company_id
+                                        },
+                                        data=json.dumps(refund_data))
+
+        if(not response.ok):
+            raise Exception(response.reason)
+
+        return response.json()
+
+    def charge_create(self, charge_data):
         response = self.session.request("POST",
                                         CHARGES_URL[:-1],
                                         header_auth=True,

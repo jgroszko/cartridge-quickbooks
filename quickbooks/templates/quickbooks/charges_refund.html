@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+
+<p>Are you sure you want to reverse charge {{charge.id}}?</p>
+
+<br />
+
+<p>{{charge.card.name}}<p>
+<p>{{charge.description}}</p>
+
+<br />
+
+<p>
+  <form method="post">
+    {% csrf_token %}
+    <button class="default">Confirm</button>
+    &nbsp;
+    <a href="{% url "quickbooks_charges" %}">Cancel</a>
+  </form>
+</p>
+{% endblock %}

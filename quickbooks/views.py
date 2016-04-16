@@ -1,4 +1,4 @@
-from django.shortcuts import render_to_response
+from django.shortcuts import render_to_response, redirect
 from django.template import RequestContext
 from django.contrib.admin.views.decorators import staff_member_required
 
@@ -39,5 +39,23 @@ def charges(request):
         data['authorize_url'] = _reauthorize(request, p)
 
     return render_to_response('quickbooks/charges.html',
+                              data,
+                              context_instance=RequestContext(request))
+
+@staff_member_required
+def charges_refund(request, charge_id):
+    p = Payments(
+        access_token = request.session.get(SESSION_ACCESS_TOKEN),
+        access_secret = request.session.get(SESSION_ACCESS_SECRET))
+
+    if(request.POST):
+        p.charge_refund(charge_id)
+
+        return redirect("quickbooks_charges")
+
+    data = {}
+    data['charge'] = p.charge(charge_id)
+
+    return render_to_response('quickbooks/charges_refund.html',
                               data,
                               context_instance=RequestContext(request))
