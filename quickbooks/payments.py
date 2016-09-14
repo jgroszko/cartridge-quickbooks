@@ -150,12 +150,13 @@ class Payments:
         if('ErrorCode' in response_data):
             if(response_data['ErrorCode'] == 212):
                 logger.info("Attempted to renew API token outside of window\n%s" % response.content)
-            else:
+                return
+            elif(response_data['ErrorCode'] != 0):
                 raise Exception(response.content)
-        else:
-            oas = OAuth_Session.objects.get()
-            oas.access_key = response_data['OAuthToken']
-            oas.access_secret = response_data['OAuthTokenSecret']
-            oas.save()
 
-            logger.info("Successfully reconnect API token" % response.content)
+        oas = OAuth_Session.objects.get()
+        oas.access_key = response_data['OAuthToken']
+        oas.access_secret = response_data['OAuthTokenSecret']
+        oas.save()
+
+        logger.info("Successfully reconnect API token" % response.content)
