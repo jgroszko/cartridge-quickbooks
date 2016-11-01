@@ -1,4 +1,4 @@
-from django.shortcuts import render_to_response, redirect
+from django.shortcuts import render, redirect
 from django.template import RequestContext
 from django.contrib.admin.views.decorators import staff_member_required
 
@@ -38,9 +38,7 @@ def charges(request):
     else:
         data['authorize_url'] = _reauthorize(request, p)
 
-    return render_to_response('quickbooks/charges.html',
-                              data,
-                              context_instance=RequestContext(request))
+    return render(request, 'quickbooks/charges.html', data)
 
 @staff_member_required
 def charges_refund(request, charge_id):
@@ -56,6 +54,4 @@ def charges_refund(request, charge_id):
     data = {}
     data['charge'] = p.charge(charge_id)
 
-    return render_to_response('quickbooks/charges_refund.html',
-                              data,
-                              context_instance=RequestContext(request))
+    return render(request, 'quickbooks/charges_refund.html', data)
