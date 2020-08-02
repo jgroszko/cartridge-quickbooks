@@ -81,7 +81,7 @@ class Payments:
             self.auth_client.refresh(refresh_token=self.auth_client.refresh_token)
 
             session_info = OAuth_Session.objects.get()
-            session_info.access_token = self.auth_client.faccess_token
+            session_info.access_token = self.auth_client.access_token
             session_info.refresh_token = self.auth_client.refresh_token
 
             session_info.save()
