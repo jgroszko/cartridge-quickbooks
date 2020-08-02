@@ -30,7 +30,7 @@ class Payments:
     def __init__(self, request=None):
         callback_url = ''
         if request is not None:
-            callback_url = request.build_absolute_uri(request.path).replace('http','https')
+            callback_url = request.build_absolute_uri(request.path).replace('http:','https:')
 
         self.auth_client = AuthClient(
             settings.QUICKBOOKS_CLIENT_ID,
