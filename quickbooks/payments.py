@@ -1,66 +1,67 @@
-import json, uuid, logging
+import json, uuid, logging, requests, datetime
 
+from django.utils import timezone
 from quickbooks.models import OAuth_Session
 from mezzanine.conf import settings
 
-from rauth import OAuth1Service, OAuth1Session
+from intuitlib.client import AuthClient
+from intuitlib.enums import Scopes
 
-SERVICE_NAME = "QuickBooks Payments API"
+# from rauth import OAuth1Service, OAuth1Session
 
-REQUEST_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_request_token"
-ACCESS_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_access_token"
-AUTHORIZE_URL = "https://appcenter.intuit.com/connect/begin"
-RECONNECT_URL = "https://appcenter.intuit.com/api/v1/connection/reconnect"
+# SERVICE_NAME = "QuickBooks Payments API"
+
+# REQUEST_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_request_token"
+# ACCESS_TOKEN_URL = "https://oauth.intuit.com/oauth/v1/get_access_token"
+# AUTHORIZE_URL = "https://appcenter.intuit.com/connect/begin"
+# RECONNECT_URL = "https://appcenter.intuit.com/api/v1/connection/reconnect"
 
 if settings.DEBUG:
     BASE_URL = "https://sandbox.api.intuit.com/quickbooks/v4/payments"
 else:
     BASE_URL = "https://api.intuit.com/quickbooks/v4/payments"
 
-CHARGES_URL = BASE_URL + "/charges/"
+CHARGES_URL = BASE_URL + "/charges"
 CHARGES_REFUND_URL_FORMAT = BASE_URL + "/charges/%s/refunds"
 
 logger = logging.getLogger(__name__)
 
 class Payments:
-    def __init__(self, access_token=None, access_secret=None):
-        self.service = OAuth1Service(
-            name=SERVICE_NAME,
-            consumer_key=settings.QUICKBOOKS_CONSUMER_KEY,
-            consumer_secret=settings.QUICKBOOKS_CONSUMER_SECRET,
-            request_token_url=REQUEST_TOKEN_URL,
-            access_token_url=ACCESS_TOKEN_URL,
-            authorize_url=AUTHORIZE_URL,
-            base_url=BASE_URL)
+    def __init__(self, request=None):
+        callback_url = ''
+        if request is not None:
+            callback_url = request.build_absolute_uri(request.path).replace('http','https')
 
-        self.access_token = access_token
-        self.access_secret = access_secret
+        self.auth_client = AuthClient(
+            settings.QUICKBOOKS_CLIENT_ID,
+            settings.QUICKBOOKS_CLIENT_SECRET,
+            callback_url,
+            'sandbox' if settings.DEBUG else 'production',
+        )
 
         if(OAuth_Session.objects.count() == 1):
             session_info = OAuth_Session.objects.get()
 
-            self.company_id = session_info.company_id
+            if(session_info.updated < timezone.now() - datetime.timedelta(hours=1)):
+                if(session_info.updated < timezone.now() - datetime.timedelta(days=1)):
+                    logger.info('Refresh token has expired')
+                    return
+                else:
+                    logger.info('Get fresh access token')
+                    self.refresh()
+            else:
+                logger.info('Re-use access token')
+                self.auth_client.access_token = session_info.access_token
+                self.auth_client.refresh_token = session_info.refresh_token
 
-            self.session = self.service.get_session((session_info.access_key,
-                                                     session_info.access_secret))
+    def is_authorized(self):
+        return hasattr(self.auth_client, 'access_token') and self.auth_client.access_token is not None
 
-    def get_auth_url(self, callback_url):
-        params = {
-            'oauth_callback': callback_url
-        }
+    def get_auth_url(self):
+        return self.auth_client.get_authorization_url([Scopes.PAYMENT, Scopes.OPENID])
 
-        self.access_token, self.access_secret = self.service.get_request_token(params=params)
-
-        return self.service.get_authorize_url(self.access_token)
-
-    def get_auth_session(self, verifier, realm):
-        data = {
-            'oauth_verifier': verifier
-        }
-
-        self.session = self.service.get_auth_session(self.access_token,
-                                                     self.access_secret,
-                                                     data=data)
+    def get_auth_token(self, auth_code, realm_id):
+        self.auth_client.get_bearer_token(auth_code, realm_id=realm_id)
 
         oas = None
         if(OAuth_Session.objects.count() == 1):
@@ -68,95 +69,60 @@ class Payments:
         else:
             oas = OAuth_Session.objects.create()
 
-        oas.access_key = self.session.access_token
-        oas.access_secret = self.session.access_token_secret
-        oas.company_id = realm
+        oas.access_token = self.auth_client.access_token
+        oas.refresh_token = self.auth_client.refresh_token
+        oas.company_id = self.auth_client.realm_id
         oas.save()
 
-        return self.session
+        return self.auth_client.access_token
 
-    def charges(self):
-        response = self.session.request("GET",
-                                    CHARGES_URL)
+    def refresh(self):
+        try:
+            self.auth_client.refresh(refresh_token=self.auth_client.refresh_token)
 
-        if(not response.ok):
-            raise Exception(response.reason)
+            session_info = OAuth_Session.objects.get()
+            session_info.access_token = self.auth_client.faccess_token
+            session_info.refresh_token = self.auth_client.refresh_token
 
-        return response.json()
+            session_info.save()
 
-    def charge(self, charge_id):
-        response = self.session.request("GET",
-                                        CHARGES_URL + charge_id)
+            logger.info('Refresh success')
+        
+        except:
+            logger.exception('Refresh failed')
 
-        if(not response.ok):
-            raise Exception(response.reason)
-
-        return response.json()
-
-    def charge_refund(self, charge_id):
-        charge = self.charge(charge_id)
-
-        refund_data = {
-            "amount": charge['amount']
+    def headers(self):
+        return {
+            'Authorization': 'Bearer {0}'.format(self.auth_client.access_token),
+            'Accepts': 'application/json',
+            'Content-Type': 'application/json;charset=utf-8',
+            'request-Id': str(uuid.uuid4())
         }
 
-        response = self.session.request("POST",
-                                        CHARGES_REFUND_URL_FORMAT % charge_id,
-                                        header_auth=True,
-                                        headers = {
-                                            'Content-Type': 'application/json',
-                                            'Request-Id': str(uuid.uuid1()),
-                                            'Company-Id': self.company_id
-                                        },
-                                        data=json.dumps(refund_data))
+    def get_request(self, url):
+        response = requests.get(url, headers=self.headers())
+        return response
+
+    def post_request(self, url, data):
+        response = requests.post(url, headers=self.headers(), data=data)
 
         if(not response.ok):
-            raise Exception(response.reason)
+            print('Charge Failed, ', response.content)
 
-        return response.json()
+        return response
+
+    def get_user_info(self):
+        request = self.auth_client.get_user_info(access_token=self.auth_client.access_token)
 
     def charge_create(self, charge_data):
-        response = self.session.request("POST",
-                                        CHARGES_URL[:-1],
-                                        header_auth=True,
-                                        headers={
-                                            'Content-Type': 'application/json',
-                                            'Request-Id': str(uuid.uuid1()),
-                                            'Company-Id': self.company_id
-                                        },
-                                        data=json.dumps(charge_data))
+        self.get_user_info()
+
+        response = self.post_request(
+            CHARGES_URL,
+            json.dumps(charge_data)
+        )
 
         if(not response.ok):
             raise Exception(response.content)
 
         return response.json()
-
-    def reconnect(self):
-        response = self.session.request("GET",
-                                        RECONNECT_URL,
-                                        header_auth=True,
-                                        headers={
-                                            'Content-Type': 'application/json',
-                                            'Request-Id': str(uuid.uuid1()),
-                                            'Company-Id': self.company_id
-                                        },
-                                        data=None)
-
-        if(not response.ok):
-            raise Exception(response.content)
-
-        response_data = response.json()
-
-        if('ErrorCode' in response_data):
-            if(response_data['ErrorCode'] == 212):
-                logger.info("Attempted to renew API token outside of window\n%s" % response.content)
-                return
-            elif(response_data['ErrorCode'] != 0):
-                raise Exception(response.content)
-
-        oas = OAuth_Session.objects.get()
-        oas.access_key = response_data['OAuthToken']
-        oas.access_secret = response_data['OAuthTokenSecret']
-        oas.save()
-
-        logger.info("Successfully reconnect API token" % response.content)

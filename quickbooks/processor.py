@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def quickbooks_payment_handler(request, order_form, order):
     p = Payments()
 
-    if(not p.session):
+    if(not p.is_authorized()):
         raise CheckoutError("No payment session")
 
     data = order_form.cleaned_data
@@ -18,6 +18,10 @@ def quickbooks_payment_handler(request, order_form, order):
         charge = p.charge_create({
             "amount": str(order.total),
             "currency": "USD",
+            "context": {
+                "mobile": "false", 
+                "isEcommerce": "true"
+            },
             "card": {
                 "expYear": data['card_expiry_year'],
                 "expMonth": data['card_expiry_month'],
@@ -31,8 +35,7 @@ def quickbooks_payment_handler(request, order_form, order):
                 "name": data['card_name'],
                 "cvc": data['card_ccv'],
                 "number": data['card_number']
-            },
-            "description": str(order)
+            }
         })
 
         if(charge['status'] == "DECLINED"):
